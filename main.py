@@ -141,7 +141,9 @@ def forum_search(query: str) -> str:
         for i in top_indices
     )
 
-    print(discussions[:1200])
+    for i, thread in enumerate(discussions.split("\n\n"), 1):
+        print(f"\n{'=' * 30} THREAD {i} {'=' * 30}\n")
+        print(thread[:1200])
 
     return discussions
 
@@ -177,11 +179,9 @@ def wiki_summary(wiki_title: str) -> str:
     print(wiki_title)
 
     try:
-
         summary = wikipedia.summary(
             wiki_title,
-            auto_suggest=False
-        )
+            auto_suggest=False)
 
         summary = summary[:5000]
 
@@ -433,10 +433,7 @@ button {
 
 <form method="POST">
 
-<textarea
-name="query"
-placeholder="Ask something..."
->{{ query }}</textarea>
+<textarea name="query" placeholder="Ask something...">how does public opinion of the XGames differ from the actual business or event?</textarea>
 
 <br>
 
@@ -482,10 +479,6 @@ def home():
 
                 print("\n")
                 print("=" * 60)
-                print("FINAL OUTPUT")
-                print("=" * 60)
-
-                print(final_message.content)
 
             except Exception as e:
 
