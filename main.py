@@ -307,7 +307,7 @@ def answer_question(state: State):
 
     print("\nFINAL ANSWER")
     print("=" * 60)
-    print(response.content)
+    print(response.content[0]["text"])
 
     return {
         "messages": [response]
