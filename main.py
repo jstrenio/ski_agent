@@ -259,7 +259,7 @@ def set_plan(state: State):
 
     print("\nPLAN")
     print("=" * 60)
-    print(response.content)
+    print(response.content[0]["text"])
 
     return {
         "messages": [response],
