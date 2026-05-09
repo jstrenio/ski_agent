@@ -32,7 +32,7 @@ app = Flask(__name__)
 # GEMINI
 # =========================================================
 
-MODEL = "gemini-2.5-flash-lite"
+MODEL = 'gemini-3.1-flash-lite-preview'"
 
 llm = ChatGoogleGenerativeAI(
     model=MODEL,
