@@ -155,19 +155,25 @@ def forum_search(query: str) -> str:
 def wiki_search(query: str) -> str:
     """search wikipedia for top 5 most relevant pages."""
 
-    try:
+    print('wiki search query:', query)
 
-        results = wikipedia.search(query)[:5]
+    for i in range(3):
 
-        print('wiki search results:' + str(results))
+        try:
+            results = wikipedia.search(query)[:5]
 
-        return str(results)
+            print('wiki search results:', results)
 
-    except Exception as e:
+            if results:
+                return str(results)
 
-        print(f'wiki search failed: {e}')
+        except Exception as e:
 
-        return "[]"
+            print(f'wiki search failed: {e}')
+
+            time.sleep(1)
+
+    return "no useful wiki search results found"
 
 @tool
 def wiki_summary(wiki_title: str) -> str:
@@ -208,7 +214,7 @@ def wiki_summary(wiki_title: str) -> str:
 
                 print('shortened summary also failed.')
 
-    print('wiki summary: ' + str(summary[:100]))
+    print('wiki summary: ' + str(summary[:250]) + '...')
 
     print('\n' + '=' * 60 + '\n')
 
@@ -250,6 +256,12 @@ Previous tool results are included above.
 Decide the next step:
 - If more info is needed, call a tool
 - If done, respond with END
+
+IMPORTANT:
+- Do NOT repeatedly search for the same thing
+- If search results are weak or unrelated, move on
+- After a few tool calls, synthesize an answer
+- Prefer forum_search for opinions/community sentiment
 '''
 
 coordinate_prompt = ChatPromptTemplate.from_template(coordinate_text)
