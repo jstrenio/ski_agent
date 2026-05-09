@@ -408,7 +408,7 @@ HTML = """
 <html>
 <head>
 
-<title>Ski Agent</title>
+<title>Ski Agent - (you can enter your own search as well)</title>
 
 <style>
 
