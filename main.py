@@ -475,8 +475,6 @@ Submit
 
 <div class="output">{{ output }}</div>
 
-<div class="output">{{ output }}</div>
-
 <script>
 function showLoading() {
     document.getElementById("loading").style.display = "block";
