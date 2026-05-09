@@ -455,9 +455,11 @@ button {
 
 <h1>Ski Forum Agent</h1>
 
-<form method="POST">
+<form method="POST" onsubmit="showLoading()">
 
-<textarea name="query">how does public opinion of the XGames differ from the actual business or event?</textarea>
+<textarea name="query" placeholder="Ask something...">
+how does public opinion of the XGames differ from the actual business or event?
+</textarea>
 
 <br>
 
@@ -467,7 +469,19 @@ Submit
 
 </form>
 
+<div id="loading" style="display:none; margin-top:20px;">
+    thinking... (this may take a few minutes due to cold free servers)
+</div>
+
 <div class="output">{{ output }}</div>
+
+<div class="output">{{ output }}</div>
+
+<script>
+function showLoading() {
+    document.getElementById("loading").style.display = "block";
+}
+</script>
 
 </body>
 </html>
