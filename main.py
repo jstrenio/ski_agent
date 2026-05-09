@@ -491,7 +491,7 @@ def home():
         with contextlib.redirect_stdout(buffer):
 
             try:
-
+                print('thinking... (this may take a few minutes due to cold free servers)')
                 result = graph.invoke({
                     "messages": [
                         HumanMessage(content=query)
