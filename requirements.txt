@@ -1,0 +1,9 @@
+flask
+langgraph
+langchain
+langchain-core
+langchain-google-genai
+pandas
+rank-bm25
+wikipedia
+pydantic
