@@ -18,7 +18,6 @@ import io
 import contextlib
 import time
 import sys
-import csv
 
 csv.field_size_limit(sys.maxsize)
 
@@ -32,10 +31,10 @@ app = Flask(__name__)
 # GEMINI
 # =========================================================
 
-MODEL = 'gemini-3.1-flash-lite-preview'
+models = ['gemini-3.1-flash-lite-preview']
 
 llm = ChatGoogleGenerativeAI(
-    model=MODEL,
+    model=models[0],
     google_api_key=os.getenv("GOOGLE_API_KEY")
 )
 
@@ -46,19 +45,21 @@ llm = ChatGoogleGenerativeAI(
 class State(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
     plan: str
+    action: str
 
 # =========================================================
 # TOKENIZER
 # =========================================================
 
-def tokenize(text: str):
+def tokenize(text):
     return re.findall(r"\b\w+\b", text.lower())
 
 # =========================================================
-# LOAD DATASET
+# LOAD CSV
 # =========================================================
 
 threads = []
+tokenized_corpus = []
 seen_questions = set()
 
 CSV_FILES = [
@@ -90,25 +91,24 @@ for filename in CSV_FILES:
                 )
 
                 if isinstance(answers, list):
-                    answers = " ".join(answers)
+                    answers = ". ".join(answers)
 
             except:
                 answers = ""
 
             thread = f"{question}. {answers}"
 
-            threads.append(thread[:4000])
+            threads.append(thread)
+
+            tokenized_corpus.append(
+                tokenize(thread)
+            )
 
 print(f"loaded threads: {len(threads)}")
 
 # =========================================================
 # BM25
 # =========================================================
-
-tokenized_corpus = [
-    tokenize(thread)
-    for thread in threads
-]
 
 bm25 = BM25Okapi(tokenized_corpus)
 
@@ -120,11 +120,7 @@ print("bm25 ready")
 
 @tool
 def forum_search(query: str) -> str:
-    """search ski forum discussions"""
-
-    print("\nFORUM SEARCH")
-    print("=" * 60)
-    print(query)
+    """search ski forum discussions with provided query."""
 
     tokenized_query = tokenize(query)
 
@@ -136,64 +132,87 @@ def forum_search(query: str) -> str:
         reverse=True
     )[:3]
 
-    discussions = "\n\n".join(
+    selected_threads = [
         threads[i][:2000]
         for i in top_indices
-    )
+    ]
 
-    for i, thread in enumerate(discussions.split("\n\n"), 1):
+    discussions = "\n\n".join(selected_threads)
+
+    print("forum results:")
+
+    for i, thread in enumerate(selected_threads, 1):
+
         print(f"\n{'=' * 30} THREAD {i} {'=' * 30}\n")
-        print(thread[:1200])
+
+        print(thread[:350])
+
+    print('\n' + '=' * 60 + '\n')
 
     return discussions
 
-
 @tool
 def wiki_search(query: str) -> str:
-    """search wikipedia"""
-
-    print("\nWIKI SEARCH")
-    print("=" * 60)
-    print(query)
+    """search wikipedia for top 5 most relevant pages."""
 
     try:
+
         results = wikipedia.search(query)[:5]
 
-        print(results)
+        print('wiki search results:' + str(results))
 
         return str(results)
 
     except Exception as e:
 
-        print("wiki search failed:", e)
+        print(f'wiki search failed: {e}')
 
-        return "wiki search failed"
-
+        return "[]"
 
 @tool
 def wiki_summary(wiki_title: str) -> str:
-    """retrieve wikipedia summary"""
+    """takes title from wiki_search and retrieves summary."""
 
-    print("\nWIKI SUMMARY")
-    print("=" * 60)
-    print(wiki_title)
+    print("started wiki_summary...")
+    print("input:", wiki_title)
 
-    try:
-        summary = wikipedia.summary(
-            wiki_title,
-            auto_suggest=False)
+    summary = 'wikipedia unavailable'
 
-        summary = summary[:5000]
+    for _ in range(3):
 
-        print(summary[:1000])
+        try:
 
-        return summary
+            summary = wikipedia.page(
+                wiki_title,
+                auto_suggest=False
+            ).content[:10000]
 
-    except Exception as e:
+            break
 
-        print("wiki summary failed:", e)
+        except:
 
-        return "summary unavailable"
+            print('summary failed')
+
+            time.sleep(2)
+
+            try:
+
+                summary = wikipedia.summary(
+                    wiki_title,
+                    auto_suggest=False
+                )[:10000]
+
+                break
+
+            except:
+
+                print('shortened summary also failed.')
+
+    print('wiki summary: ' + str(summary[:100]))
+
+    print('\n' + '=' * 60 + '\n')
+
+    return summary
 
 # =========================================================
 # TOOL LLM
@@ -209,40 +228,40 @@ llm_w_tools = llm.bind_tools([
 # PROMPTS
 # =========================================================
 
-goal_prompt = ChatPromptTemplate.from_template("""
-You are a planning agent for a ski forum database.
+goal_text = '''
+You are a planning agent at a ski forum database of public conversations on all topics ski related. Your job is to interpret the user's query
+and devise a course of action to answer the question. Your options are to use the forum_search tool to search forum conversations, to use the
+wiki_search tool followed by the wiki_summary tool to search wikipedia and extract information, or to answer on your own. When possible you should consider using one or both tools as many times as needed to retrieve the necessary information to answer the query.
+User Query:{user_query}
+'''
 
-User Query:
-{user_query}
+goal_prompt = ChatPromptTemplate.from_template(goal_text)
 
-Create a short plan to answer the question.
-""")
-
-coordinate_prompt = ChatPromptTemplate.from_template("""
+coordinate_text = '''
 You are a task coordinating agent.
 
-Conversation:
+User query:
 {messages}
 
-Plan:
+Current plan:
 {plan}
 
-Choose the next action.
-Use tools if needed.
-Otherwise finish.
-""")
+Previous tool results are included above.
+Decide the next step:
+- If more info is needed, call a tool
+- If done, respond with END
+'''
 
-answer_prompt = ChatPromptTemplate.from_template("""
-Use the retrieved information to answer thoroughly.
+coordinate_prompt = ChatPromptTemplate.from_template(coordinate_text)
 
-Context:
-{messages}
-""")
+answer_text = '''
+Use the retrieved information to write a thorough answer to the user's query, rooted in the information collected. Context: {messages}
+'''
+
+answer_prompt = ChatPromptTemplate.from_template(answer_text)
 
 plan_chain = goal_prompt | llm
-
 coordinate_chain = coordinate_prompt | llm_w_tools
-
 answer_chain = answer_prompt | llm
 
 # =========================================================
@@ -251,67 +270,62 @@ answer_chain = answer_prompt | llm
 
 def set_plan(state: State):
 
-    user_query = state["messages"][-1].content
+    user_query = state['messages'][-1].content
 
     response = plan_chain.invoke({
-        "user_query": user_query
+        'user_query': user_query
     })
 
-    print("\nPLAN")
-    print("=" * 60)
-    print(response.content[0]["text"])
+    print('ai plan: ' + response.content[0]['text'])
+
+    print('\n' + '=' * 60 + '\n')
 
     return {
-        "messages": [response],
-        "plan": str(response.content)
+        'messages': [response],
+        'plan': response.content
     }
-
 
 def coordinate_action(state: State):
 
     response = coordinate_chain.invoke({
-        "messages": state["messages"],
-        "plan": state["plan"]
+        'messages': state['messages'],
+        'plan': state['plan']
     })
 
-    print("\nCOORDINATOR")
-    print("=" * 60)
+    print(
+        f'coordinated action: '
+        f'{response.tool_calls[:1][0]["name"]} '
+        f'{response.tool_calls[:1][0]["args"].get("query", "")}'
+        if response.tool_calls else "END"
+    )
 
-    if getattr(response, "tool_calls", None):
-        print(response.tool_calls[0]["name"])
-    else:
-        print("END")
+    print('\n' + '=' * 60 + '\n')
 
-    return {
-        "messages": [response]
-    }
-
+    return {'messages': [response]}
 
 def route_action(state: State):
 
-    last_msg = state["messages"][-1]
+    last_msg = state['messages'][-1]
 
-    tool_calls = getattr(last_msg, "tool_calls", None)
+    print('routing tools call...')
+
+    tool_calls = (
+        getattr(last_msg, "tool_calls", None)
+        or last_msg.additional_kwargs.get("tool_calls")
+    )
 
     if tool_calls:
-        return "tools"
+        return 'tools'
 
-    return "END"
-
+    return 'END'
 
 def answer_question(state: State):
 
     response = answer_chain.invoke({
-        "messages": state["messages"]
+        'messages': state['messages']
     })
 
-    print("\nFINAL ANSWER")
-    print("=" * 60)
-    print(response.content[0]["text"])
-
-    return {
-        "messages": [response]
-    }
+    return {"messages": [response]}
 
 # =========================================================
 # BUILD GRAPH
@@ -319,23 +333,20 @@ def answer_question(state: State):
 
 builder = StateGraph(State)
 
-builder.add_node(
-    "set_plan",
-    set_plan
-)
+builder.add_node('set_plan', set_plan)
 
 builder.add_node(
-    "coordinate_action",
+    'coordinate_action',
     coordinate_action
 )
 
 builder.add_node(
-    "answer_question",
+    'answer_question',
     answer_question
 )
 
 builder.add_node(
-    "tools",
+    'tools',
     ToolNode([
         forum_search,
         wiki_search,
@@ -345,30 +356,30 @@ builder.add_node(
 
 builder.add_edge(
     START,
-    "set_plan"
+    'set_plan'
 )
 
 builder.add_edge(
-    "set_plan",
-    "coordinate_action"
+    'set_plan',
+    'coordinate_action'
 )
 
 builder.add_conditional_edges(
-    "coordinate_action",
+    'coordinate_action',
     route_action,
     {
-        "tools": "tools",
-        "END": "answer_question"
+        'tools': 'tools',
+        'END': 'answer_question'
     }
 )
 
 builder.add_edge(
-    "tools",
-    "coordinate_action"
+    'tools',
+    'coordinate_action'
 )
 
 builder.add_edge(
-    "answer_question",
+    'answer_question',
     END
 )
 
@@ -421,6 +432,7 @@ button {
     height: 650px;
     overflow-y: scroll;
     white-space: pre-wrap;
+    line-height: 1.5;
 }
 
 </style>
@@ -433,7 +445,7 @@ button {
 
 <form method="POST">
 
-<textarea name="query" placeholder="Ask something...">how does public opinion of the XGames differ from the actual business or event?</textarea>
+<textarea name="query">how does public opinion of the XGames differ from the actual business or event?</textarea>
 
 <br>
 
@@ -457,7 +469,6 @@ Submit
 def home():
 
     output = ""
-    query = ""
 
     if request.method == "POST":
 
@@ -475,10 +486,11 @@ def home():
                     ]
                 })
 
-                final_message = result["messages"][-1]
+                ans = result['messages'][-1].content[0]['text']
 
-                print("\n")
-                print("=" * 60)
+                print('\n' + '=' * 60 + '\n')
+
+                print(ans)
 
             except Exception as e:
 
@@ -490,8 +502,7 @@ def home():
 
     return render_template_string(
         HTML,
-        output=output,
-        query=query
+        output=output
     )
 
 # =========================================================
