@@ -1,5 +1,4 @@
 from flask import Flask, render_template_string, request
-
 from typing import TypedDict, Annotated
 from langgraph.graph.message import add_messages, AnyMessage
 from langchain_core.messages import HumanMessage
@@ -18,6 +17,10 @@ import os
 import io
 import contextlib
 import time
+import sys
+import csv
+
+csv.field_size_limit(sys.maxsize)
 
 # =========================================================
 # FLASK
